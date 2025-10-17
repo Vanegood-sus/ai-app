@@ -1,0 +1,9 @@
+kivy==2.3.0
+aiohttp==3.9.1
+certifi==2023.11.17
+Kivy-Garden==0.1.5
+aiohttp
+buildozer
+certifi
+cython
+kivy
