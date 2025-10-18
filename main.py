@@ -5,16 +5,15 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.image import Image as KivyImage
-from kivy.core.window import Window
 from kivy.uix.filechooser import FileChooserIconView
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
-import asyncio
+from kivy.core.window import Window
 from threading import Thread
-import aiohttp
+import requests
 import json
 import logging
+import base64
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -122,7 +121,7 @@ class AIAssistantApp(App):
             if filechooser.selection:
                 image_path = filechooser.selection[0]
                 popup.dismiss()
-                Thread(target=lambda: asyncio.run(self.process_image(image_path, mode))).start()
+                Thread(target=self.process_image, args=(image_path, mode)).start()
         
         select_btn = Button(text='Выбрать', size_hint=(1, 0.1), on_press=select_image)
         
@@ -132,14 +131,13 @@ class AIAssistantApp(App):
         popup = Popup(title='Выберите изображение', content=content, size_hint=(0.9, 0.9))
         popup.open()
     
-    async def process_image(self, image_path, mode):
+    def process_image(self, image_path, mode):
         Clock.schedule_once(lambda dt: self.append_to_chat(f'⏳ Обрабатываю изображение...'))
         
         try:
             with open(image_path, 'rb') as f:
                 image_data = f.read()
             
-            import base64
             base64_image = base64.b64encode(image_data).decode('utf-8')
             image_url = f"data:image/jpeg;base64,{base64_image}"
             
@@ -152,7 +150,7 @@ class AIAssistantApp(App):
             else:
                 prompt = "Что изображено на картинке?"
             
-            result = await self.call_pollinations_vision(image_url, prompt)
+            result = self.call_pollinations_vision(image_url, prompt)
             
             Clock.schedule_once(lambda dt: self.append_to_chat(f'🤖 Результат:\n{result}'))
             
@@ -160,7 +158,7 @@ class AIAssistantApp(App):
             logger.error(f"Error processing image: {e}")
             Clock.schedule_once(lambda dt: self.append_to_chat(f'❌ Ошибка: {str(e)}'))
     
-    async def call_pollinations_vision(self, image_url, prompt):
+    def call_pollinations_vision(self, image_url, prompt):
         headers = {"Content-Type": "application/json"}
         
         payload = {
@@ -178,13 +176,18 @@ class AIAssistantApp(App):
         }
         
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.API_URL, headers=headers, json=payload, timeout=self.API_TIMEOUT) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result and 'choices' in result and len(result['choices']) > 0:
-                            return result['choices'][0]['message']['content']
-                    return "Не удалось получить ответ от API"
+            response = requests.post(
+                self.API_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.API_TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result and 'choices' in result and len(result['choices']) > 0:
+                    return result['choices'][0]['message']['content']
+            return "Не удалось получить ответ от API"
         except Exception as e:
             logger.error(f"API error: {e}")
             return f"Ошибка API: {str(e)}"
@@ -197,9 +200,9 @@ class AIAssistantApp(App):
         self.append_to_chat(f'👤 Вы: {user_text}')
         self.user_input.text = ''
         
-        Thread(target=lambda: asyncio.run(self.get_ai_response(user_text))).start()
+        Thread(target=self.get_ai_response, args=(user_text,)).start()
     
-    async def get_ai_response(self, user_message):
+    def get_ai_response(self, user_message):
         Clock.schedule_once(lambda dt: self.append_to_chat('⏳ AI думает...'))
         
         try:
@@ -217,23 +220,29 @@ class AIAssistantApp(App):
                 "max_tokens": self.MAX_TOKENS_TEXT
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.API_URL, headers=headers, json=payload, timeout=self.API_TIMEOUT) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if result and 'choices' in result and len(result['choices']) > 0:
-                            ai_response = result['choices'][0]['message']['content']
-                            self.conversation_history.append({"role": "assistant", "content": ai_response})
-                            
-                            Clock.schedule_once(lambda dt: self.append_to_chat(f'🤖 AI: {ai_response}'))
-                        else:
-                            Clock.schedule_once(lambda dt: self.append_to_chat('❌ Не удалось получить ответ'))
-                    else:
-                        Clock.schedule_once(lambda dt: self.append_to_chat(f'❌ Ошибка API: {response.status}'))
-                        
+            response = requests.post(
+                self.API_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.API_TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result and 'choices' in result and len(result['choices']) > 0:
+                    ai_response = result['choices'][0]['message']['content']
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    
+                    Clock.schedule_once(lambda dt: self.append_to_chat(f'🤖 AI: {ai_response}'))
+                else:
+                    Clock.schedule_once(lambda dt: self.append_to_chat('❌ Не удалось получить ответ'))
+            else:
+                Clock.schedule_once(lambda dt: self.append_to_chat(f'❌ Ошибка API: {response.status_code}'))
+                    
         except Exception as e:
             logger.error(f"Error getting AI response: {e}")
             Clock.schedule_once(lambda dt: self.append_to_chat(f'❌ Ошибка: {str(e)}'))
 
 if __name__ == '__main__':
     AIAssistantApp().run()
+        
