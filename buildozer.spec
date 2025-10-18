@@ -9,7 +9,8 @@ source.include_exts = py,png,jpg,kv,atlas
 
 version = 1.0
 
-requirements = python3,kivy,aiohttp,certifi
+# ИСПРАВЛЕНО: убран aiohttp, добавлен requests (работает на Android)
+requirements = python3,kivy,requests,urllib3,certifi,charset-normalizer,idna,pillow
 
 orientation = portrait
 fullscreen = 0
@@ -29,6 +30,9 @@ android.entrypoint = org.kivy.android.PythonActivity
 android.app_theme = @android:style/Theme.NoTitleBar
 
 services = 
+
+p4a.branch = master
+p4a.bootstrap = sdl2
 
 [buildozer]
 
